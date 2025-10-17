@@ -4,11 +4,10 @@
  */
 
 import { GoogleGenerativeAI, SchemaType, type FunctionDeclaration } from '@google/generative-ai';
-import type { AudioAnalysis } from './AudioInput';
 
 export interface GLSLGenerationOptions {
   apiKey: string;
-  updateInterval?: number; // milliseconds between generations
+  audioFile: File;
 }
 
 // Function declaration for GLSL shader generation
@@ -35,9 +34,8 @@ export class GeminiGLSLGenerator {
   private genAI: GoogleGenerativeAI;
   private model: any;
   private listeners: Set<(glslCode: string) => void> = new Set();
-  private lastGenerationTime: number = 0;
-  private updateInterval: number;
   private isGenerating: boolean = false;
+  private audioFile: File;
 
   constructor(options: GLSLGenerationOptions) {
     this.genAI = new GoogleGenerativeAI(options.apiKey);
@@ -45,92 +43,128 @@ export class GeminiGLSLGenerator {
       model: 'gemini-2.5-pro',
       tools: [{ functionDeclarations: [generateGLSLShaderFunction] }],
     });
-    this.updateInterval = options.updateInterval ?? 3000; // Default: 3 seconds
+    this.audioFile = options.audioFile;
   }
 
   /**
-   * Generate GLSL shader code based on audio analysis using Function Calling
+   * Generate GLSL shader code by sending audio file directly to Gemini (one-time call)
    */
-  async generateGLSL(audioData: AudioAnalysis): Promise<void> {
-    const now = Date.now();
-    if (now - this.lastGenerationTime < this.updateInterval || this.isGenerating) {
+  async generateGLSL(): Promise<void> {
+    if (this.isGenerating) {
       return;
     }
 
     this.isGenerating = true;
-    this.lastGenerationTime = now;
+
+    console.log('[GeminiGLSL] Starting GLSL generation...');
 
     try {
-      const prompt = this.createPrompt(audioData);
+      // Convert audio file to base64
+      console.log('[GeminiGLSL] Converting audio file to base64...');
+      const audioBase64 = await this.fileToBase64(this.audioFile);
 
-      // Call the model with function calling
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
-      });
-
-      const response = result.response;
-
-      // Check if function was called
-      const functionCall = response.functionCalls()?.[0];
-
-      if (functionCall && functionCall.name === 'generate_glsl_shader') {
-        const { shaderCode, description } = functionCall.args;
-
-        console.log('Generated shader:', description);
-
-        // Validate and process the shader code
-        const processedShader = this.processShaderCode(shaderCode);
-        this.notifyListeners(processedShader);
-      } else {
-        // Fallback: try to extract from text response
-        console.warn('No function call in response, using fallback');
-        const glslCode = this.extractGLSL(response.text());
-        this.notifyListeners(glslCode);
-      }
-    } catch (error) {
-      console.error('Failed to generate GLSL:', error);
-      // Use default shader on error
-      this.notifyListeners(this.getDefaultShader());
-    } finally {
-      this.isGenerating = false;
-    }
-  }
-
-  /**
-   * Create prompt for Gemini based on audio analysis (optimized for Function Calling)
-   */
-  private createPrompt(audioData: AudioAnalysis): string {
-    const { volume, frequencyData } = audioData;
-
-    // Calculate frequency distribution
-    const bassEnergy = this.getFrequencyBandEnergy(frequencyData, 0, 0.1);
-    const midEnergy = this.getFrequencyBandEnergy(frequencyData, 0.1, 0.5);
-    const highEnergy = this.getFrequencyBandEnergy(frequencyData, 0.5, 1.0);
-
-    return `Create a visually stunning GLSL fragment shader that responds to this audio analysis:
-
-Audio Data:
-- Overall volume: ${(volume * 100).toFixed(2)}%
-- Bass energy (low frequencies): ${(bassEnergy * 100).toFixed(2)}%
-- Mid energy (mid frequencies): ${(midEnergy * 100).toFixed(2)}%
-- High energy (high frequencies): ${(highEnergy * 100).toFixed(2)}%
+      const prompt = `Analyze this audio file and create a visually stunning GLSL fragment shader that responds to the music.
 
 Design Guidelines:
-- Map bass energy → large-scale movements, bold colors, or pulsating shapes
-- Map mid energy → medium-scale patterns or color transitions
-- Map high energy → fine details, rapid changes, or particle-like effects
-- Create smooth, music-reactive animations
-- Use creative visual metaphors (waves, fractals, particles, geometric patterns, etc.)
+- Create dynamic, music-reactive visuals
+- Use creative visual metaphors (waves, fractals, particles, geometric patterns, psychedelic effects, etc.)
+- Make the visuals evolve and change with the music's mood and energy
+- Consider rhythm, melody, and overall atmosphere of the music
 
 Technical Requirements:
-- Use uniform vec2 u_resolution for screen size
-- Use uniform float u_time for animation
-- Include precision statement if needed
+- ONLY use these uniforms: uniform vec2 u_resolution; and uniform float u_time;
+- DO NOT use any other uniforms (no u_volume, u_bass, u_mid, u_high, etc.)
+- DO NOT use texture2D or any texture sampling
+- DO NOT use external functions or samplers
+- Use only built-in GLSL math functions
 - Complete, valid GLSL fragment shader code
 - Optimize for real-time performance
 
 Generate the shader using the generate_glsl_shader function.`;
+
+      console.log('[GeminiGLSL] Calling Gemini API with audio file...');
+
+      // Call the model with audio file and function calling
+      const result = await this.model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: this.audioFile.type,
+                data: audioBase64,
+              },
+            },
+            { text: prompt },
+          ],
+        }],
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+      });
+
+      console.log('[GeminiGLSL] Received response from Gemini');
+
+      const response = result.response;
+      console.log('[GeminiGLSL] Response object:', response);
+
+      // Check if function was called (functionCalls is a method)
+      const functionCalls = response.functionCalls();
+      console.log('[GeminiGLSL] Function calls:', functionCalls);
+
+      if (functionCalls && functionCalls.length > 0) {
+        const functionCall = functionCalls[0];
+        console.log('[GeminiGLSL] Function call detected:', functionCall.name);
+
+        if (functionCall.name === 'generate_glsl_shader') {
+          const { shaderCode, description } = functionCall.args;
+
+          console.log('[GeminiGLSL] Generated shader description:', description);
+          console.log('[GeminiGLSL] Shader code length:', shaderCode?.length || 0, 'characters');
+          console.log('[GeminiGLSL] Raw shader code:');
+          console.log(shaderCode);
+
+          // Validate and process the shader code
+          const processedShader = this.processShaderCode(shaderCode);
+          console.log('[GeminiGLSL] Processed shader code:');
+          console.log(processedShader);
+          console.log('[GeminiGLSL] Shader processed, notifying listeners');
+          this.notifyListeners(processedShader);
+        }
+      } else {
+        // Fallback: try to extract from text response
+        console.warn('[GeminiGLSL] No function call in response, using fallback');
+        console.log('[GeminiGLSL] Response text:', response.text());
+        const glslCode = this.extractGLSL(response.text());
+        this.notifyListeners(glslCode);
+      }
+    } catch (error) {
+      console.error('[GeminiGLSL] Failed to generate GLSL:', error);
+      console.error('[GeminiGLSL] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      // Use default shader on error
+      this.notifyListeners(this.getDefaultShader());
+    } finally {
+      this.isGenerating = false;
+      console.log('[GeminiGLSL] GLSL generation complete');
+    }
+  }
+
+  /**
+   * Convert File to base64 string
+   */
+  private async fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove data URL prefix (e.g., "data:audio/mpeg;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
   /**
@@ -171,21 +205,6 @@ precision mediump float;
     }
 
     return code.trim();
-  }
-
-  /**
-   * Get energy for a specific frequency band
-   */
-  private getFrequencyBandEnergy(frequencyData: Uint8Array, startRatio: number, endRatio: number): number {
-    const start = Math.floor(frequencyData.length * startRatio);
-    const end = Math.floor(frequencyData.length * endRatio);
-
-    let sum = 0;
-    for (let i = start; i < end; i++) {
-      sum += frequencyData[i];
-    }
-
-    return (sum / (end - start)) / 255;
   }
 
   /**

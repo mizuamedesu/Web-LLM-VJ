@@ -21,7 +21,10 @@ export class AudioInput {
    * Initialize audio input from microphone
    */
   async initMicrophone(): Promise<void> {
+    console.log('[AudioInput] Initializing microphone...');
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    console.log('[AudioInput] Microphone access granted');
+
     this.audioContext = new AudioContext();
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 2048;
@@ -29,6 +32,7 @@ export class AudioInput {
     this.source = this.audioContext.createMediaStreamSource(stream);
     this.source.connect(this.analyser);
 
+    console.log('[AudioInput] Audio context created, starting analysis');
     this.startAnalysis();
   }
 
@@ -53,9 +57,13 @@ export class AudioInput {
   private startAnalysis(): void {
     if (!this.analyser) return;
 
+    console.log('[AudioInput] Starting audio analysis...');
+
     const bufferLength = this.analyser.frequencyBinCount;
     const frequencyData = new Uint8Array(bufferLength);
     const waveformData = new Uint8Array(bufferLength);
+
+    let frameCount = 0;
 
     const analyze = () => {
       if (!this.analyser) return;
@@ -72,6 +80,15 @@ export class AudioInput {
         volume,
         timestamp: Date.now(),
       };
+
+      // Log every 60 frames (roughly once per second at 60fps)
+      if (frameCount % 60 === 0) {
+        console.log('[AudioInput] Audio analysis frame:', {
+          volume: (volume * 100).toFixed(2) + '%',
+          listeners: this.listeners.size,
+        });
+      }
+      frameCount++;
 
       this.notifyListeners(analysis);
       this.rafId = requestAnimationFrame(analyze);

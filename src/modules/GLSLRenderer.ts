@@ -11,6 +11,7 @@ export class GLSLRenderer {
   private currentShader: string = '';
 
   constructor(canvas: HTMLCanvasElement) {
+    console.log('[GLSLRenderer] Constructor called');
     this.canvas = canvas;
     this.init();
   }
@@ -19,13 +20,17 @@ export class GLSLRenderer {
    * Initialize the GLSL canvas
    */
   private init(): void {
+    console.log('[GLSLRenderer] Initializing...');
     // Set canvas size to match window
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
 
     // Initialize with default shader
+    console.log('[GLSLRenderer] Creating GlslCanvas instance');
     this.sandbox = new GlslCanvas(this.canvas);
+    console.log('[GLSLRenderer] GlslCanvas created:', this.sandbox);
     this.loadDefaultShader();
+    console.log('[GLSLRenderer] Initialization complete');
   }
 
   /**
@@ -66,7 +71,20 @@ void main() {
    * Update the shader code
    */
   updateShader(shaderCode: string): void {
-    if (!this.sandbox || shaderCode === this.currentShader) {
+    console.log('[GLSLRenderer] updateShader called');
+    console.log('[GLSLRenderer] this.sandbox:', this.sandbox);
+    console.log('[GLSLRenderer] Shader code length:', shaderCode?.length || 0);
+    console.log('[GLSLRenderer] Received shader code:');
+    console.log(shaderCode);
+
+    if (!this.sandbox) {
+      console.error('[GLSLRenderer] Sandbox not initialized');
+      console.error('[GLSLRenderer] this:', this);
+      return;
+    }
+
+    if (shaderCode === this.currentShader) {
+      console.log('[GLSLRenderer] Shader unchanged, skipping update');
       return;
     }
 
@@ -74,6 +92,7 @@ void main() {
       // Ensure shader has proper precision statement
       let processedShader = shaderCode;
       if (!processedShader.includes('precision')) {
+        console.log('[GLSLRenderer] Adding precision statement');
         processedShader = `#ifdef GL_ES
 precision mediump float;
 #endif
@@ -81,11 +100,12 @@ precision mediump float;
 ` + processedShader;
       }
 
+      console.log('[GLSLRenderer] Loading shader into glslCanvas...');
       this.sandbox.load(processedShader);
       this.currentShader = shaderCode;
-      console.log('Shader updated successfully');
+      console.log('[GLSLRenderer] Shader updated successfully');
     } catch (error) {
-      console.error('Failed to load shader:', error);
+      console.error('[GLSLRenderer] Failed to load shader:', error);
       // Keep the previous shader on error
     }
   }
@@ -114,10 +134,13 @@ precision mediump float;
    * Cleanup
    */
   destroy(): void {
+    console.log('[GLSLRenderer] Destroy called');
     window.removeEventListener('resize', () => this.resizeCanvas());
     if (this.sandbox) {
+      console.log('[GLSLRenderer] Destroying sandbox');
       this.sandbox.destroy();
       this.sandbox = null;
     }
+    console.log('[GLSLRenderer] Destroy complete');
   }
 }
