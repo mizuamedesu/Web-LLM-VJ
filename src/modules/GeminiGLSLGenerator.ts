@@ -63,17 +63,31 @@ export class GeminiGLSLGenerator {
       console.log('[GeminiGLSL] Converting audio file to base64...');
       const audioBase64 = await this.fileToBase64(this.audioFile);
 
-      const prompt = `Analyze this audio file and create a visually stunning GLSL fragment shader that responds to the music.
+      const prompt = `Analyze this audio file and create a visually stunning GLSL fragment shader that responds to the music in real-time.
 
 Design Guidelines:
 - Create dynamic, music-reactive visuals
 - Use creative visual metaphors (waves, fractals, particles, geometric patterns, psychedelic effects, etc.)
-- Make the visuals evolve and change with the music's mood and energy
-- Consider rhythm, melody, and overall atmosphere of the music
+- Make the visuals respond to the music's mood, energy, and rhythm
+- Consider the overall atmosphere of the music
+
+Available Audio Uniforms (updated in real-time):
+- uniform float u_volume; // Overall volume (0.0 to 1.0)
+- uniform float u_bass; // Low frequency energy (0.0 to 1.0)
+- uniform float u_mid; // Mid frequency energy (0.0 to 1.0)
+- uniform float u_high; // High frequency energy (0.0 to 1.0)
+- uniform float u_spectrum[32]; // Full spectrum data as array (0.0 to 1.0 for each bin)
+
+Standard Uniforms:
+- uniform vec2 u_resolution; // Screen resolution
+- uniform float u_time; // Animation time
 
 Technical Requirements:
-- ONLY use these uniforms: uniform vec2 u_resolution; and uniform float u_time;
-- DO NOT use any other uniforms (no u_volume, u_bass, u_mid, u_high, etc.)
+- Use the audio uniforms to make visuals react to the music
+- Map bass to large-scale movements, colors, or shapes
+- Map mid frequencies to medium-scale patterns
+- Map high frequencies to fine details, sparkles, or rapid changes
+- Use u_spectrum array for detailed frequency-based effects
 - DO NOT use texture2D or any texture sampling
 - DO NOT use external functions or samplers
 - Use only built-in GLSL math functions

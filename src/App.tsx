@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { AudioInput } from './modules/AudioInput';
 import { GeminiGLSLGenerator } from './modules/GeminiGLSLGenerator';
 import { GLSLRenderer } from './modules/GLSLRenderer';
 import './App.css';
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioInputRef = useRef<AudioInput | null>(null);
   const glslGeneratorRef = useRef<GeminiGLSLGenerator | null>(null);
   const rendererRef = useRef<GLSLRenderer | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
@@ -71,6 +73,11 @@ function App() {
       audio.loop = true;
       audioElementRef.current = audio;
 
+      // Initialize audio input for spectrum analysis
+      console.log('[App] Initializing AudioInput');
+      audioInputRef.current = new AudioInput();
+      audioInputRef.current.initAudioElement(audio);
+
       // Start playing audio
       console.log('[App] Starting audio playback');
       await audio.play();
@@ -101,6 +108,14 @@ function App() {
           rendererRef.current.updateShader(glslCode);
         } else {
           console.error('[App] Renderer not initialized');
+        }
+      });
+
+      // Subscribe to audio data and pass to renderer
+      audioInputRef.current.subscribe((audioData) => {
+        if (rendererRef.current) {
+          // Pass audio spectrum data to renderer as uniforms
+          rendererRef.current.updateAudioData(audioData);
         }
       });
 

@@ -4,6 +4,7 @@
  */
 
 import GlslCanvas from 'glslCanvas';
+import type { AudioAnalysis } from './AudioInput';
 
 export class GLSLRenderer {
   private canvas: HTMLCanvasElement;
@@ -121,6 +122,43 @@ precision mediump float;
     } catch (error) {
       console.error(`Failed to set uniform ${name}:`, error);
     }
+  }
+
+  /**
+   * Update audio data uniforms
+   */
+  updateAudioData(audioData: AudioAnalysis): void {
+    if (!this.sandbox) return;
+
+    // Calculate frequency band energies
+    const bassEnergy = this.getFrequencyBandEnergy(audioData.frequencyData, 0, 0.1);
+    const midEnergy = this.getFrequencyBandEnergy(audioData.frequencyData, 0.1, 0.5);
+    const highEnergy = this.getFrequencyBandEnergy(audioData.frequencyData, 0.5, 1.0);
+
+    // Set uniforms for GLSL shader
+    this.setUniform('u_volume', audioData.volume);
+    this.setUniform('u_bass', bassEnergy);
+    this.setUniform('u_mid', midEnergy);
+    this.setUniform('u_high', highEnergy);
+
+    // Pass full spectrum as array (first 32 frequency bins for performance)
+    const spectrumData = Array.from(audioData.frequencyData.slice(0, 32)).map(v => v / 255);
+    this.setUniform('u_spectrum', spectrumData);
+  }
+
+  /**
+   * Get energy for a specific frequency band
+   */
+  private getFrequencyBandEnergy(frequencyData: Uint8Array, startRatio: number, endRatio: number): number {
+    const start = Math.floor(frequencyData.length * startRatio);
+    const end = Math.floor(frequencyData.length * endRatio);
+
+    let sum = 0;
+    for (let i = start; i < end; i++) {
+      sum += frequencyData[i];
+    }
+
+    return (sum / (end - start)) / 255;
   }
 
   /**
