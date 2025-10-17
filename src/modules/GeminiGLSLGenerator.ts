@@ -3,32 +3,12 @@
  * Converts audio analysis data to GLSL shader code using Gemini 2.5 Pro with Function Calling
  */
 
-import { GoogleGenerativeAI, SchemaType, type FunctionDeclaration } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface GLSLGenerationOptions {
   apiKey: string;
   audioFile: File;
 }
-
-// Function declaration for GLSL shader generation
-const generateGLSLShaderFunction: FunctionDeclaration = {
-  name: 'generate_glsl_shader',
-  description: 'Generates a GLSL fragment shader code based on audio analysis data (volume, bass, mid, high frequencies)',
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      shaderCode: {
-        type: SchemaType.STRING,
-        description: 'Complete GLSL fragment shader code including precision, uniforms (u_time, u_resolution), and main function. The shader should be visually interesting and respond to the audio characteristics.',
-      },
-      description: {
-        type: SchemaType.STRING,
-        description: 'Brief description of the visual effect and how it responds to the audio (bass, mid, high frequencies)',
-      },
-    },
-    required: ['shaderCode', 'description'],
-  },
-};
 
 export class GeminiGLSLGenerator {
   private genAI: GoogleGenerativeAI;
@@ -37,12 +17,12 @@ export class GeminiGLSLGenerator {
   private progressListeners: Set<(progress: { code: string; isComplete: boolean }) => void> = new Set();
   private isGenerating: boolean = false;
   private audioFile: File;
+  private previousShader: string = '';
 
   constructor(options: GLSLGenerationOptions) {
     this.genAI = new GoogleGenerativeAI(options.apiKey);
     this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro',
-      tools: [{ functionDeclarations: [generateGLSLShaderFunction] }],
+      model: 'gemini-2.5-flash',
     });
     this.audioFile = options.audioFile;
   }
@@ -212,8 +192,9 @@ void main() {
 \`\`\`
 
 このコードスタイルを参考に、音楽に合った独自のビジュアルを生成してください。
-できる限り画面を埋め尽くすようにし、動きや色の変化を豊かにしてください。 
-generate_glsl_shader関数を使用してシェーダーを生成してください。`;
+できる限り画面を埋め尽くすようにし、動きや色の変化を豊かにしてください。
+
+**重要: GLSLコードのみを出力してください。マークダウンのコードブロック(\`\`\`glsl)や説明文は一切含めないでください。シェーダーコードそのものだけを生成してください。**`;
 
       console.log('[GeminiGLSL] Calling Gemini API with streaming...');
 
@@ -231,67 +212,48 @@ generate_glsl_shader関数を使用してシェーダーを生成してくださ
             { text: prompt },
           ],
         }],
-        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        generationConfig: {
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        } as any,
       });
 
       console.log('[GeminiGLSL] Stream started from Gemini');
 
       let accumulatedCode = '';
-      let foundFunctionCall = false;
 
-      // Process streaming chunks
+      // Process streaming chunks with real-time text streaming
       for await (const chunk of result.stream) {
         console.log('[GeminiGLSL] Received chunk from stream');
 
-        const functionCalls = chunk.functionCalls();
-        if (functionCalls && functionCalls.length > 0) {
-          foundFunctionCall = true;
-          const functionCall = functionCalls[0];
-          console.log('[GeminiGLSL] Function call in chunk:', functionCall.name);
+        const chunkText = chunk.text();
+        if (chunkText) {
+          accumulatedCode += chunkText;
+          console.log('[GeminiGLSL] Accumulated code length:', accumulatedCode.length);
 
-          if (functionCall.name === 'generate_glsl_shader') {
-            const { shaderCode } = functionCall.args;
-            accumulatedCode = shaderCode;
-
-            console.log('[GeminiGLSL] Accumulated code length:', accumulatedCode.length);
-
-            // Notify progress listeners with streaming code
-            this.notifyProgressListeners(accumulatedCode, false);
-          }
+          // Notify progress listeners with streaming code (real-time display and application)
+          this.notifyProgressListeners(accumulatedCode, false);
         }
       }
 
       console.log('[GeminiGLSL] Stream complete');
+      console.log('[GeminiGLSL] Final code length:', accumulatedCode.length);
+      console.log('[GeminiGLSL] Raw shader code:');
+      console.log(accumulatedCode);
 
-      if (foundFunctionCall && accumulatedCode) {
-        console.log('[GeminiGLSL] Final code length:', accumulatedCode.length);
-        console.log('[GeminiGLSL] Raw shader code:');
-        console.log(accumulatedCode);
+      // Validate and process the shader code
+      const processedShader = this.processShaderCode(accumulatedCode);
+      console.log('[GeminiGLSL] Processed shader code:');
+      console.log(processedShader);
+      console.log('[GeminiGLSL] Shader processed, notifying listeners');
 
-        // Animate code display character by character (typing effect)
-        await this.animateCodeDisplay(accumulatedCode);
+      // Save as previous shader for potential rollback
+      this.previousShader = processedShader;
 
-        // Validate and process the shader code
-        const processedShader = this.processShaderCode(accumulatedCode);
-        console.log('[GeminiGLSL] Processed shader code:');
-        console.log(processedShader);
-        console.log('[GeminiGLSL] Shader processed, notifying listeners');
-
-        // Notify that generation is complete
-        this.notifyProgressListeners(processedShader, true);
-        this.notifyListeners(processedShader);
-      } else {
-        // Fallback: try to extract from aggregated text response
-        console.warn('[GeminiGLSL] No function call in stream, using fallback');
-        const response = await result.response;
-        console.log('[GeminiGLSL] Response text:', response.text());
-        const glslCode = this.extractGLSL(response.text());
-
-        this.notifyProgressListeners(glslCode, false);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        this.notifyProgressListeners(glslCode, true);
-        this.notifyListeners(glslCode);
-      }
+      // Notify that generation is complete
+      this.notifyProgressListeners(processedShader, true);
+      this.notifyListeners(processedShader);
     } catch (error) {
       console.error('[GeminiGLSL] Failed to generate GLSL:', error);
       console.error('[GeminiGLSL] Error details:', {
@@ -304,24 +266,6 @@ generate_glsl_shader関数を使用してシェーダーを生成してくださ
       this.isGenerating = false;
       console.log('[GeminiGLSL] GLSL generation complete');
     }
-  }
-
-  /**
-   * Animate code display with typing effect
-   */
-  private async animateCodeDisplay(code: string): Promise<void> {
-    const chunkSize = 50; // Characters per update
-    const delayMs = 30; // Delay between updates
-
-    for (let i = 0; i < code.length; i += chunkSize) {
-      const partialCode = code.substring(0, i + chunkSize);
-      this.notifyProgressListeners(partialCode, false);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-
-    // Show complete code for a moment before applying
-    this.notifyProgressListeners(code, false);
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   /**
@@ -367,21 +311,6 @@ precision mediump float;
   }
 
   /**
-   * Extract GLSL code from Gemini response (fallback method)
-   */
-  private extractGLSL(text: string): string {
-    // Remove markdown code blocks if present
-    let code = text.replace(/```glsl\n?/g, '').replace(/```\n?/g, '');
-
-    // Ensure we have basic shader structure
-    if (!code.includes('void main()')) {
-      code = this.getDefaultShader();
-    }
-
-    return code.trim();
-  }
-
-  /**
    * Get default shader as fallback
    */
   private getDefaultShader(): string {
@@ -395,6 +324,72 @@ void main() {
     vec3 color = vec3(st.x, st.y, abs(sin(u_time)));
     gl_FragColor = vec4(color, 1.0);
 }`;
+  }
+
+  /**
+   * Get error display shader
+   */
+  private getErrorShader(): string {
+    return `#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform float u_time;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    uv = uv * 2.0 - 1.0;
+    uv.x *= u_resolution.x / u_resolution.y;
+
+    // Pulsating red background
+    float pulse = 0.5 + 0.5 * sin(u_time * 3.0);
+    vec3 bgColor = vec3(0.3 + pulse * 0.2, 0.0, 0.0);
+
+    // Simple "ERROR" text representation using distance fields
+    float dist = 1.0;
+
+    // E
+    float e1 = step(abs(uv.x + 0.6), 0.15) * step(abs(uv.y), 0.3);
+    float e2 = step(abs(uv.y), 0.05) * step(abs(uv.x + 0.6), 0.15);
+    float e3 = step(abs(uv.y - 0.25), 0.05) * step(abs(uv.x + 0.525), 0.075);
+    float e4 = step(abs(uv.y + 0.25), 0.05) * step(abs(uv.x + 0.525), 0.075);
+    float e = max(max(e2, e3), e4);
+
+    // R (simplified)
+    float r1 = step(abs(uv.x + 0.25), 0.15) * step(abs(uv.y), 0.3);
+    float r2 = step(abs(uv.y + 0.15), 0.15) * step(abs(uv.x + 0.25), 0.15);
+    float r = max(r1, r2);
+
+    // Display text
+    float text = max(e, r);
+    vec3 textColor = vec3(1.0, 0.2, 0.2) * (1.0 + pulse * 0.5);
+
+    vec3 color = mix(bgColor, textColor, text);
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  }
+
+  /**
+   * Rollback to previous shader on error
+   */
+  async rollbackToPreviousShader(): Promise<void> {
+    if (this.previousShader) {
+      console.log('[GeminiGLSL] Rolling back to previous shader');
+
+      // Show error shader briefly
+      const errorShader = this.getErrorShader();
+      this.notifyListeners(errorShader);
+
+      // Wait for 1.5 seconds
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Restore previous shader
+      this.notifyListeners(this.previousShader);
+    } else {
+      console.log('[GeminiGLSL] No previous shader to rollback to, using default');
+      this.notifyListeners(this.getDefaultShader());
+    }
   }
 
   /**

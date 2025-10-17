@@ -194,7 +194,7 @@ function App() {
       <canvas ref={canvasRef} className="glsl-canvas" />
       <CodeEditor code={generatedCode} isVisible={isGenerating} />
 
-      <div className="controls">
+      <div className={`controls ${isGenerating ? 'hidden' : ''}`}>
 
         {!isRunning ? (
           <div className="setup">

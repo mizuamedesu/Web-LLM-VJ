@@ -57,7 +57,6 @@ export class AudioInput {
   private startAnalysis(): void {
     if (!this.analyser) return;
 
-    console.log('[AudioInput] Starting audio analysis...');
 
     const bufferLength = this.analyser.frequencyBinCount;
     const frequencyData = new Uint8Array(bufferLength);
@@ -81,13 +80,6 @@ export class AudioInput {
         timestamp: Date.now(),
       };
 
-      // Log every 60 frames (roughly once per second at 60fps)
-      if (frameCount % 60 === 0) {
-        console.log('[AudioInput] Audio analysis frame:', {
-          volume: (volume * 100).toFixed(2) + '%',
-          listeners: this.listeners.size,
-        });
-      }
       frameCount++;
 
       this.notifyListeners(analysis);
