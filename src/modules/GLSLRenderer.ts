@@ -70,8 +70,9 @@ void main() {
 
   /**
    * Update the shader code
+   * Returns true if successful, false if compilation error
    */
-  updateShader(shaderCode: string): void {
+  updateShader(shaderCode: string): Promise<boolean> {
     console.log('[GLSLRenderer] updateShader called');
     console.log('[GLSLRenderer] this.sandbox:', this.sandbox);
     console.log('[GLSLRenderer] Shader code length:', shaderCode?.length || 0);
@@ -81,12 +82,12 @@ void main() {
     if (!this.sandbox) {
       console.error('[GLSLRenderer] Sandbox not initialized');
       console.error('[GLSLRenderer] this:', this);
-      return;
+      return Promise.resolve(false);
     }
 
     if (shaderCode === this.currentShader) {
       console.log('[GLSLRenderer] Shader unchanged, skipping update');
-      return;
+      return Promise.resolve(true);
     }
 
     try {
@@ -102,12 +103,41 @@ precision mediump float;
       }
 
       console.log('[GLSLRenderer] Loading shader into glslCanvas...');
+
+      // Capture console errors to detect compilation issues
+      const originalError = console.error;
+      let hadError = false;
+      let errorMessage = '';
+
+      console.error = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('Error compiling shader') || message.includes('syntax error') || message.includes('ERROR:')) {
+          hadError = true;
+          errorMessage = message;
+        }
+        originalError.apply(console, args);
+      };
+
       this.sandbox.load(processedShader);
-      this.currentShader = shaderCode;
-      console.log('[GLSLRenderer] Shader updated successfully');
+
+      // Return promise to wait for potential async errors
+      return new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          console.error = originalError;
+
+          if (hadError) {
+            console.error('[GLSLRenderer] Shader compilation failed:', errorMessage);
+            resolve(false);
+          } else {
+            this.currentShader = shaderCode;
+            console.log('[GLSLRenderer] Shader updated successfully');
+            resolve(true);
+          }
+        }, 200);
+      });
     } catch (error) {
       console.error('[GLSLRenderer] Failed to load shader:', error);
-      // Keep the previous shader on error
+      return Promise.resolve(false);
     }
   }
 

@@ -34,6 +34,7 @@ export class GeminiGLSLGenerator {
   private genAI: GoogleGenerativeAI;
   private model: any;
   private listeners: Set<(glslCode: string) => void> = new Set();
+  private progressListeners: Set<(progress: { code: string; isComplete: boolean }) => void> = new Set();
   private isGenerating: boolean = false;
   private audioFile: File;
 
@@ -96,10 +97,10 @@ Technical Requirements:
 
 Generate the shader using the generate_glsl_shader function.`;
 
-      console.log('[GeminiGLSL] Calling Gemini API with audio file...');
+      console.log('[GeminiGLSL] Calling Gemini API with streaming...');
 
-      // Call the model with audio file and function calling
-      const result = await this.model.generateContent({
+      // Call the model with streaming enabled
+      const result = await this.model.generateContentStream({
         contents: [{
           role: 'user',
           parts: [
@@ -115,39 +116,62 @@ Generate the shader using the generate_glsl_shader function.`;
         toolConfig: { functionCallingConfig: { mode: 'ANY' } },
       });
 
-      console.log('[GeminiGLSL] Received response from Gemini');
+      console.log('[GeminiGLSL] Stream started from Gemini');
 
-      const response = result.response;
-      console.log('[GeminiGLSL] Response object:', response);
+      let accumulatedCode = '';
+      let foundFunctionCall = false;
 
-      // Check if function was called (functionCalls is a method)
-      const functionCalls = response.functionCalls();
-      console.log('[GeminiGLSL] Function calls:', functionCalls);
+      // Process streaming chunks
+      for await (const chunk of result.stream) {
+        console.log('[GeminiGLSL] Received chunk from stream');
 
-      if (functionCalls && functionCalls.length > 0) {
-        const functionCall = functionCalls[0];
-        console.log('[GeminiGLSL] Function call detected:', functionCall.name);
+        const functionCalls = chunk.functionCalls();
+        if (functionCalls && functionCalls.length > 0) {
+          foundFunctionCall = true;
+          const functionCall = functionCalls[0];
+          console.log('[GeminiGLSL] Function call in chunk:', functionCall.name);
 
-        if (functionCall.name === 'generate_glsl_shader') {
-          const { shaderCode, description } = functionCall.args;
+          if (functionCall.name === 'generate_glsl_shader') {
+            const { shaderCode } = functionCall.args;
+            accumulatedCode = shaderCode;
 
-          console.log('[GeminiGLSL] Generated shader description:', description);
-          console.log('[GeminiGLSL] Shader code length:', shaderCode?.length || 0, 'characters');
-          console.log('[GeminiGLSL] Raw shader code:');
-          console.log(shaderCode);
+            console.log('[GeminiGLSL] Accumulated code length:', accumulatedCode.length);
 
-          // Validate and process the shader code
-          const processedShader = this.processShaderCode(shaderCode);
-          console.log('[GeminiGLSL] Processed shader code:');
-          console.log(processedShader);
-          console.log('[GeminiGLSL] Shader processed, notifying listeners');
-          this.notifyListeners(processedShader);
+            // Notify progress listeners with streaming code
+            this.notifyProgressListeners(accumulatedCode, false);
+          }
         }
+      }
+
+      console.log('[GeminiGLSL] Stream complete');
+
+      if (foundFunctionCall && accumulatedCode) {
+        console.log('[GeminiGLSL] Final code length:', accumulatedCode.length);
+        console.log('[GeminiGLSL] Raw shader code:');
+        console.log(accumulatedCode);
+
+        // Animate code display character by character (typing effect)
+        await this.animateCodeDisplay(accumulatedCode);
+
+        // Validate and process the shader code
+        const processedShader = this.processShaderCode(accumulatedCode);
+        console.log('[GeminiGLSL] Processed shader code:');
+        console.log(processedShader);
+        console.log('[GeminiGLSL] Shader processed, notifying listeners');
+
+        // Notify that generation is complete
+        this.notifyProgressListeners(processedShader, true);
+        this.notifyListeners(processedShader);
       } else {
-        // Fallback: try to extract from text response
-        console.warn('[GeminiGLSL] No function call in response, using fallback');
+        // Fallback: try to extract from aggregated text response
+        console.warn('[GeminiGLSL] No function call in stream, using fallback');
+        const response = await result.response;
         console.log('[GeminiGLSL] Response text:', response.text());
         const glslCode = this.extractGLSL(response.text());
+
+        this.notifyProgressListeners(glslCode, false);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        this.notifyProgressListeners(glslCode, true);
         this.notifyListeners(glslCode);
       }
     } catch (error) {
@@ -162,6 +186,24 @@ Generate the shader using the generate_glsl_shader function.`;
       this.isGenerating = false;
       console.log('[GeminiGLSL] GLSL generation complete');
     }
+  }
+
+  /**
+   * Animate code display with typing effect
+   */
+  private async animateCodeDisplay(code: string): Promise<void> {
+    const chunkSize = 50; // Characters per update
+    const delayMs = 30; // Delay between updates
+
+    for (let i = 0; i < code.length; i += chunkSize) {
+      const partialCode = code.substring(0, i + chunkSize);
+      this.notifyProgressListeners(partialCode, false);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    // Show complete code for a moment before applying
+    this.notifyProgressListeners(code, false);
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   /**
@@ -246,6 +288,14 @@ void main() {
   }
 
   /**
+   * Subscribe to code generation progress
+   */
+  subscribeProgress(callback: (progress: { code: string; isComplete: boolean }) => void): () => void {
+    this.progressListeners.add(callback);
+    return () => this.progressListeners.delete(callback);
+  }
+
+  /**
    * Notify all listeners
    */
   private notifyListeners(glslCode: string): void {
@@ -253,9 +303,17 @@ void main() {
   }
 
   /**
+   * Notify progress listeners
+   */
+  private notifyProgressListeners(code: string, isComplete: boolean): void {
+    this.progressListeners.forEach(listener => listener({ code, isComplete }));
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {
     this.listeners.clear();
+    this.progressListeners.clear();
   }
 }

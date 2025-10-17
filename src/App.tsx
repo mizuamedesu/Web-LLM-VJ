@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AudioInput } from './modules/AudioInput';
 import { GeminiGLSLGenerator } from './modules/GeminiGLSLGenerator';
 import { GLSLRenderer } from './modules/GLSLRenderer';
+import { CodeEditor } from './components/CodeEditor';
 import './App.css';
 
 function App() {
@@ -15,6 +16,8 @@ function App() {
   const [apiKey, setApiKey] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [error, setError] = useState<string>('');
+  const [generatedCode, setGeneratedCode] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     console.log('[App] useEffect triggered');
@@ -101,11 +104,31 @@ function App() {
       });
       console.log('[App] GeminiGLSLGenerator created');
 
-      // Subscribe to shader code updates
-      glslGeneratorRef.current.subscribe((glslCode) => {
+      // Subscribe to code generation progress
+      glslGeneratorRef.current.subscribeProgress((progress) => {
+        console.log('[App] Code generation progress:', progress);
+        setGeneratedCode(progress.code);
+        setIsGenerating(!progress.isComplete);
+      });
+
+      // Subscribe to shader code updates with retry logic
+      glslGeneratorRef.current.subscribe(async (glslCode) => {
         console.log('[App] GLSL code received, updating renderer');
         if (rendererRef.current) {
-          rendererRef.current.updateShader(glslCode);
+          // Try to apply shader
+          const success = await rendererRef.current.updateShader(glslCode);
+
+          if (!success) {
+            console.error('[App] Shader compilation failed, retrying...');
+
+            // Wait a bit and retry generation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            if (glslGeneratorRef.current) {
+              console.log('[App] Requesting new shader generation...');
+              await glslGeneratorRef.current.generateGLSL();
+            }
+          }
         } else {
           console.error('[App] Renderer not initialized');
         }
@@ -150,6 +173,7 @@ function App() {
   return (
     <div className="app">
       <canvas ref={canvasRef} className="glsl-canvas" />
+      <CodeEditor code={generatedCode} isVisible={isGenerating} />
 
       <div className="controls">
         <h1>Web LLM VJ</h1>
