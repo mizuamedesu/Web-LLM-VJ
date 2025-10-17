@@ -288,6 +288,42 @@ body {
   margin-bottom: 4px;
 }
 
+.github-link {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(62, 62, 66, 0.5);
+  text-align: center;
+}
+
+.github-link p {
+  font-size: 12px;
+  color: #858585;
+  margin-bottom: 8px;
+}
+
+.github-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(60, 60, 60, 0.5);
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 2px;
+  color: #cccccc;
+  text-decoration: none;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.github-link a:hover {
+  background: rgba(80, 80, 80, 0.6);
+  border-color: #007ACC;
+}
+
+.github-link svg {
+  flex-shrink: 0;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .controls {
