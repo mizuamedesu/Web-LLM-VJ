@@ -182,10 +182,8 @@ function App() {
 
     console.log('[App] Regenerating shader...');
 
-    // Pause audio during regeneration
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-    }
+    // Keep audio playing during regeneration
+    // Audio will continue with the old shader until new one is applied
 
     // Trigger new shader generation
     await glslGeneratorRef.current.generateGLSL();
