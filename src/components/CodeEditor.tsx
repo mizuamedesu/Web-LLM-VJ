@@ -24,7 +24,7 @@ export function CodeEditor({ code, isVisible }: CodeEditorProps) {
           <span className="code-editor-title">Generating GLSL Shader...</span>
           <div className="code-editor-spinner"></div>
         </div>
-        <pre className="code-editor-content" ref={codeRef}>
+        <pre className="code-editor-content" ref={codeRef} data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
           <code>{code}</code>
         </pre>
       </div>

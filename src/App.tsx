@@ -11,6 +11,7 @@ function App() {
   const glslGeneratorRef = useRef<GeminiGLSLGenerator | null>(null);
   const rendererRef = useRef<GLSLRenderer | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const audioSensitivityRef = useRef<number>(1.0);
 
   const [isRunning, setIsRunning] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -143,7 +144,7 @@ function App() {
       audioInputRef.current.subscribe((audioData) => {
         if (rendererRef.current) {
           // Pass audio spectrum data to renderer as uniforms with sensitivity
-          rendererRef.current.updateAudioData(audioData, audioSensitivity);
+          rendererRef.current.updateAudioData(audioData, audioSensitivityRef.current);
         }
       });
 
@@ -207,6 +208,8 @@ function App() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Enter your Gemini API key"
+                autoComplete="off"
+                data-form-type="other"
               />
             </div>
 
@@ -254,7 +257,11 @@ function App() {
                 max="5.0"
                 step="0.1"
                 value={audioSensitivity}
-                onChange={(e) => setAudioSensitivity(parseFloat(e.target.value))}
+                onChange={(e) => {
+                  const newValue = parseFloat(e.target.value);
+                  setAudioSensitivity(newValue);
+                  audioSensitivityRef.current = newValue;
+                }}
                 style={{ width: '200px' }}
                 disabled={isGenerating}
               />
