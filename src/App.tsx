@@ -26,6 +26,7 @@ function App() {
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioSensitivity, setAudioSensitivity] = useState(1.0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const retryCountRef = useRef<number>(0);
   const maxRetries = 5;
 
@@ -234,6 +235,36 @@ function App() {
     await glslGeneratorRef.current.generateGLSL();
   };
 
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      try {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } catch (err) {
+        console.error('Error entering fullscreen:', err);
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   return (
     <div className="app">
       <canvas ref={canvasRef} className="glsl-canvas" />
@@ -357,13 +388,19 @@ function App() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
               <button
                 onClick={regenerateShader}
                 className="start-button"
                 disabled={isGenerating}
               >
                 再生成
+              </button>
+              <button
+                onClick={toggleFullscreen}
+                className="start-button"
+              >
+                {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
               </button>
               <button
                 onClick={stopVisualization}
