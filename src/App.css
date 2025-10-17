@@ -53,6 +53,58 @@ body {
   pointer-events: none;
 }
 
+.controls.minimized {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
+}
+
+.controls-header h1 {
+  font-size: 16px;
+  margin: 0;
+  color: #cccccc;
+  font-weight: 400;
+}
+
+.minimize-button,
+.restore-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(60, 60, 60, 0.5);
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 2px;
+  color: #cccccc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.minimize-button:hover,
+.restore-button:hover {
+  background: rgba(80, 80, 80, 0.6);
+  border-color: #007ACC;
+}
+
+.restore-button {
+  width: 40px;
+  height: 40px;
+}
+
 .controls h1 {
   font-size: 16px;
   margin-bottom: 16px;
@@ -106,6 +158,30 @@ body {
 }
 
 .input-group input::placeholder {
+  color: #6a6a6a;
+}
+
+.prompt-input {
+  width: 100%;
+  padding: 8px;
+  background: rgba(60, 60, 60, 0.5);
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 2px;
+  color: #cccccc;
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  transition: all 0.2s ease;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.prompt-input:focus {
+  outline: none;
+  border-color: #007ACC;
+  background: rgba(60, 60, 60, 0.7);
+}
+
+.prompt-input::placeholder {
   color: #6a6a6a;
 }
 

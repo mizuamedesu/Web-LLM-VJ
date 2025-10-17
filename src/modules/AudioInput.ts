@@ -20,10 +20,8 @@ export class AudioInput {
   /**
    * Initialize audio input from microphone
    */
-  async initMicrophone(): Promise<void> {
-    console.log('[AudioInput] Initializing microphone...');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    console.log('[AudioInput] Microphone access granted');
+  initMicrophone(stream: MediaStream): void {
+    console.log('[AudioInput] Initializing microphone with stream...');
 
     this.audioContext = new AudioContext();
     this.analyser = this.audioContext.createAnalyser();

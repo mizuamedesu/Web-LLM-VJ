@@ -19,6 +19,9 @@ function App() {
     return localStorage.getItem('gemini-api-key') || '';
   });
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioInputMode, setAudioInputMode] = useState<'file' | 'microphone'>('file');
+  const [prompt, setPrompt] = useState('');
+  const [isMinimized, setIsMinimized] = useState(false);
   const [error, setError] = useState<string>('');
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -74,26 +77,40 @@ function App() {
       return;
     }
 
-    if (!audioFile) {
+    if (audioInputMode === 'file' && !audioFile) {
       setError('Please select an audio file');
+      return;
+    }
+
+    if (audioInputMode === 'microphone' && !prompt.trim()) {
+      setError('Please enter a prompt for the shader');
       return;
     }
 
     try {
       setError('');
 
-      // Create and start audio element
-      console.log('[App] Creating audio element');
-      const audio = new Audio(URL.createObjectURL(audioFile));
-      audio.loop = true;
-      audioElementRef.current = audio;
+      if (audioInputMode === 'file' && audioFile) {
+        // File mode: use audio file
+        console.log('[App] Creating audio element from file');
+        const audio = new Audio(URL.createObjectURL(audioFile));
+        audio.loop = true;
+        audioElementRef.current = audio;
 
-      // Initialize audio input for spectrum analysis
-      console.log('[App] Initializing AudioInput');
-      audioInputRef.current = new AudioInput();
-      audioInputRef.current.initAudioElement(audio);
+        // Initialize audio input for spectrum analysis
+        console.log('[App] Initializing AudioInput');
+        audioInputRef.current = new AudioInput();
+        audioInputRef.current.initAudioElement(audio);
+      } else if (audioInputMode === 'microphone') {
+        // Microphone mode: use getUserMedia
+        console.log('[App] Requesting microphone access');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Don't start audio yet - wait for shader to be applied
+        console.log('[App] Initializing AudioInput with microphone');
+        audioInputRef.current = new AudioInput();
+        audioInputRef.current.initMicrophone(stream);
+      }
+
       console.log('[App] Audio initialized, waiting for shader application');
 
       // Ensure renderer is initialized
@@ -110,7 +127,8 @@ function App() {
       console.log('[App] Creating GeminiGLSLGenerator instance');
       glslGeneratorRef.current = new GeminiGLSLGenerator({
         apiKey,
-        audioFile,
+        audioFile: audioInputMode === 'file' ? audioFile : undefined,
+        prompt: audioInputMode === 'microphone' ? prompt : undefined,
       });
       console.log('[App] GeminiGLSLGenerator created');
 
@@ -204,48 +222,96 @@ function App() {
       <canvas ref={canvasRef} className="glsl-canvas" />
       <CodeEditor code={generatedCode} isVisible={isGenerating} />
 
-      <div className={`controls ${isGenerating ? 'hidden' : ''}`}>
-
-        {!isRunning ? (
-          <div className="setup">
-            <div className="input-group">
-              <label htmlFor="apiKey">Gemini API Key:</label>
-              <input
-                id="apiKey"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key"
-                autoComplete="off"
-                data-form-type="other"
-              />
+      <div className={`controls ${isGenerating ? 'hidden' : ''} ${isMinimized ? 'minimized' : ''}`}>
+        {!isMinimized ? (
+          <>
+            <div className="controls-header">
+              <h1>Web LLM VJ</h1>
+              <button className="minimize-button" onClick={() => setIsMinimized(true)} title="Minimize">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M14 8H2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
             </div>
 
-            <div className="input-group">
-              <label htmlFor="audioFile">Select Audio File:</label>
-              <input
-                id="audioFile"
-                type="file"
-                accept="audio/*"
-                onChange={handleFileUpload}
-              />
-              {audioFile && (
-                <p style={{ marginTop: '8px', fontSize: '14px', color: '#4ade80' }}>
-                  Selected: {audioFile.name}
-                </p>
-              )}
-            </div>
+            {!isRunning ? (
+              <div className="setup">
+                <div className="input-group">
+                  <label htmlFor="apiKey">Gemini API Key:</label>
+                  <input
+                    id="apiKey"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your Gemini API key"
+                    autoComplete="off"
+                    data-form-type="other"
+                  />
+                </div>
 
-            <button
-              onClick={startVisualization}
-              className="start-button"
-              disabled={isGenerating}
-            >
-              {isGenerating ? '生成中...' : 'Start Visualization'}
-            </button>
+                <div className="input-group">
+                  <label>Audio Input Mode:</label>
+                  <div className="radio-group">
+                    <label>
+                      <input
+                        type="radio"
+                        value="file"
+                        checked={audioInputMode === 'file'}
+                        onChange={(e) => setAudioInputMode(e.target.value as 'file' | 'microphone')}
+                      />
+                      File Upload
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        value="microphone"
+                        checked={audioInputMode === 'microphone'}
+                        onChange={(e) => setAudioInputMode(e.target.value as 'file' | 'microphone')}
+                      />
+                      Microphone
+                    </label>
+                  </div>
+                </div>
 
-            {error && <div className="error">{error}</div>}
-          </div>
+                {audioInputMode === 'file' ? (
+                  <div className="input-group">
+                    <label htmlFor="audioFile">Select Audio File:</label>
+                    <input
+                      id="audioFile"
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleFileUpload}
+                    />
+                    {audioFile && (
+                      <p style={{ marginTop: '8px', fontSize: '13px', color: '#4ade80' }}>
+                        Selected: {audioFile.name}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="input-group">
+                    <label htmlFor="prompt">Prompt for Shader:</label>
+                    <textarea
+                      id="prompt"
+                      className="prompt-input"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="Describe the visual effect you want... (e.g., 'colorful waves', 'geometric patterns')"
+                      rows={4}
+                    />
+                  </div>
+                )}
+
+                <button
+                  onClick={startVisualization}
+                  className="start-button"
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? '生成中...' : 'Start Visualization'}
+                </button>
+
+                {error && <div className="error">{error}</div>}
+              </div>
         ) : (
           <div className="running">
             {isGenerating ? (
@@ -292,6 +358,14 @@ function App() {
               </button>
             </div>
           </div>
+        )}
+          </>
+        ) : (
+          <button className="restore-button" onClick={() => setIsMinimized(false)} title="Restore">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="3" y="3" width="10" height="10" stroke="currentColor" strokeWidth="1.5" fill="none" rx="1"/>
+            </svg>
+          </button>
         )}
       </div>
     </div>

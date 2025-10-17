@@ -7,7 +7,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface GLSLGenerationOptions {
   apiKey: string;
-  audioFile: File;
+  audioFile?: File;
+  prompt?: string;
 }
 
 export class GeminiGLSLGenerator {
@@ -16,7 +17,8 @@ export class GeminiGLSLGenerator {
   private listeners: Set<(glslCode: string) => void> = new Set();
   private progressListeners: Set<(progress: { code: string; isComplete: boolean }) => void> = new Set();
   private isGenerating: boolean = false;
-  private audioFile: File;
+  private audioFile?: File;
+  private prompt?: string;
   private previousShader: string = '';
 
   constructor(options: GLSLGenerationOptions) {
@@ -25,10 +27,11 @@ export class GeminiGLSLGenerator {
       model: 'gemini-2.5-flash',
     });
     this.audioFile = options.audioFile;
+    this.prompt = options.prompt;
   }
 
   /**
-   * Generate GLSL shader code by sending audio file directly to Gemini (one-time call)
+   * Generate GLSL shader code (with audio file or prompt only)
    */
   async generateGLSL(): Promise<void> {
     if (this.isGenerating) {
@@ -40,11 +43,22 @@ export class GeminiGLSLGenerator {
     console.log('[GeminiGLSL] Starting GLSL generation...');
 
     try {
-      // Convert audio file to base64
-      console.log('[GeminiGLSL] Converting audio file to base64...');
-      const audioBase64 = await this.fileToBase64(this.audioFile);
+      let parts: any[] = [];
+      let promptText: string;
 
-      const prompt = `この音声ファイルを分析して、音楽にリアルタイムで反応する視覚的に美しいGLSLフラグメントシェーダーを作成してください。
+      // Mode 1: Audio file mode
+      if (this.audioFile) {
+        console.log('[GeminiGLSL] Converting audio file to base64...');
+        const audioBase64 = await this.fileToBase64(this.audioFile);
+
+        parts.push({
+          inlineData: {
+            mimeType: this.audioFile.type,
+            data: audioBase64,
+          },
+        });
+
+        promptText = `この音声ファイルを分析して、音楽にリアルタイムで反応する視覚的に美しいGLSLフラグメントシェーダーを作成してください。
 
 デザインガイドライン:
 - ダイナミックで音楽に反応するビジュアルを作成
@@ -195,6 +209,43 @@ void main() {
 できる限り画面を埋め尽くすようにし、動きや色の変化を豊かにしてください。
 
 **重要: GLSLコードのみを出力してください。マークダウンのコードブロック(\`\`\`glsl)や説明文は一切含めないでください。シェーダーコードそのものだけを生成してください。**`;
+      } else {
+        // Mode 2: Prompt only mode (for microphone input)
+        promptText = `以下のプロンプトに基づいて、リアルタイムでオーディオに反応する視覚的に美しいGLSLフラグメントシェーダーを作成してください。
+
+ユーザーのプロンプト: "${this.prompt || 'colorful and dynamic visual effect'}"
+
+デザインガイドライン:
+- ダイナミックで音楽に反応するビジュアルを作成
+- 音楽の雰囲気、エネルギー、リズムに反応するビジュアルにする
+- VJなので綺麗で輝いてる感じを中心にして
+
+利用可能なオーディオUniform（リアルタイムで更新）:
+- uniform float u_volume; // 全体の音量 (0.0 to 1.0)
+- uniform float u_bass; // 低周波数エネルギー (0.0 to 1.0)
+- uniform float u_mid; // 中周波数エネルギー (0.0 to 1.0)
+- uniform float u_high; // 高周波数エネルギー (0.0 to 1.0)
+- uniform float u_spectrum[32]; // 完全なスペクトルデータ配列 (各ビンで0.0 to 1.0)
+
+標準Uniform:
+- uniform vec2 u_resolution; // 画面解像度
+- uniform float u_time; // アニメーション時間
+
+技術要件:
+- オーディオuniformを使用してビジュアルを音楽に反応させる
+- texture2Dやテクスチャサンプリングは使用しない
+- 外部関数やサンプラーは使用しない
+- GLSLの組み込み数学関数のみを使用
+- 完全で有効なGLSLフラグメントシェーダーコード
+- forループのインデックスは必ず定数で初期化すること（例: for(int i=0; i<10; i++)）
+- ループの範囲も定数にすること（変数による動的なループ範囲は不可）
+
+できる限り画面を埋め尽くすようにし、動きや色の変化を豊かにしてください。
+
+**重要: GLSLコードのみを出力してください。マークダウンのコードブロック(\`\`\`glsl)や説明文は一切含めないでください。シェーダーコードそのものだけを生成してください。**`;
+      }
+
+      parts.push({ text: promptText });
 
       console.log('[GeminiGLSL] Calling Gemini API with streaming...');
 
@@ -202,15 +253,7 @@ void main() {
       const result = await this.model.generateContentStream({
         contents: [{
           role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType: this.audioFile.type,
-                data: audioBase64,
-              },
-            },
-            { text: prompt },
-          ],
+          parts: parts,
         }],
         generationConfig: {
           thinkingConfig: {
