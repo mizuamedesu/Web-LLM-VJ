@@ -29,7 +29,7 @@ function highlightGLSL(code: string): string {
 
 export function CodeEditor({ code, isVisible }: CodeEditorProps) {
   const codeRef = useRef<HTMLPreElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const linesRef = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(() => code.split('\n'), [code]);
   const highlightedLines = useMemo(() =>
@@ -37,11 +37,19 @@ export function CodeEditor({ code, isVisible }: CodeEditorProps) {
     [lines]
   );
 
+  // Auto-scroll to bottom when code updates
   useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    if (codeRef.current) {
+      codeRef.current.scrollTop = codeRef.current.scrollHeight;
     }
   }, [code]);
+
+  // Sync line numbers scroll with code scroll
+  const handleScroll = (e: React.UIEvent<HTMLPreElement>) => {
+    if (linesRef.current) {
+      linesRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
+  };
 
   if (!isVisible) return null;
 
@@ -52,13 +60,20 @@ export function CodeEditor({ code, isVisible }: CodeEditorProps) {
           <span className="code-editor-title">Generating GLSL Shader...</span>
           <div className="code-editor-spinner"></div>
         </div>
-        <div className="code-editor-content" ref={contentRef}>
-          <div className="code-editor-lines">
+        <div className="code-editor-content">
+          <div className="code-editor-lines" ref={linesRef}>
             {lines.map((_, index) => (
               <div key={index} className="line-number">{index + 1}</div>
             ))}
           </div>
-          <pre className="code-editor-code" ref={codeRef} data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+          <pre
+            className="code-editor-code"
+            ref={codeRef}
+            onScroll={handleScroll}
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
+          >
             {highlightedLines.map((line, index) => (
               <div key={index} className="code-line" dangerouslySetInnerHTML={{ __html: line || '&nbsp;' }} />
             ))}

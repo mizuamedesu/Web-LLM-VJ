@@ -14,12 +14,22 @@ function App() {
   const audioSensitivityRef = useRef<number>(1.0);
 
   const [isRunning, setIsRunning] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState(() => {
+    // Load API key from localStorage on initial render
+    return localStorage.getItem('gemini-api-key') || '';
+  });
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [error, setError] = useState<string>('');
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioSensitivity, setAudioSensitivity] = useState(1.0);
+
+  // Save API key to localStorage whenever it changes
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('gemini-api-key', apiKey);
+    }
+  }, [apiKey]);
 
   useEffect(() => {
     console.log('[App] useEffect triggered');
