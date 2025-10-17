@@ -26,6 +26,8 @@ function App() {
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioSensitivity, setAudioSensitivity] = useState(1.0);
+  const retryCountRef = useRef<number>(0);
+  const maxRetries = 5;
 
   // Save API key to localStorage whenever it changes
   useEffect(() => {
@@ -127,7 +129,7 @@ function App() {
       console.log('[App] Creating GeminiGLSLGenerator instance');
       glslGeneratorRef.current = new GeminiGLSLGenerator({
         apiKey,
-        audioFile: audioInputMode === 'file' ? audioFile : undefined,
+        audioFile: audioInputMode === 'file' && audioFile ? audioFile : undefined,
         prompt: audioInputMode === 'microphone' ? prompt : undefined,
       });
       console.log('[App] GeminiGLSLGenerator created');
@@ -147,18 +149,31 @@ function App() {
           const success = await rendererRef.current.updateShader(glslCode);
 
           if (!success) {
-            console.error('[App] Shader compilation failed, retrying...');
+            retryCountRef.current++;
+            console.error(`[App] Shader compilation failed, retry ${retryCountRef.current}/${maxRetries}`);
 
-            // Wait a bit and retry generation
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (retryCountRef.current < maxRetries) {
+              // Wait a bit and retry generation
+              await new Promise(resolve => setTimeout(resolve, 1000));
 
-            if (glslGeneratorRef.current) {
-              console.log('[App] Requesting new shader generation...');
-              await glslGeneratorRef.current.generateGLSL();
+              if (glslGeneratorRef.current) {
+                console.log('[App] Requesting new shader generation...');
+                await glslGeneratorRef.current.generateGLSL();
+              }
+            } else {
+              console.error('[App] Max retries reached, giving up');
+              setError(`Failed to compile shader after ${maxRetries} attempts`);
+              setIsGenerating(false);
+
+              // Show error shader
+              if (glslGeneratorRef.current) {
+                await glslGeneratorRef.current.rollbackToPreviousShader();
+              }
             }
           } else {
-            // Shader applied successfully, start audio playback
+            // Shader applied successfully, reset retry count and start audio playback
             console.log('[App] Shader applied successfully, starting audio playback');
+            retryCountRef.current = 0;
             if (audioElementRef.current) {
               audioElementRef.current.play();
             }
@@ -169,12 +184,14 @@ function App() {
       });
 
       // Subscribe to audio data and pass to renderer
-      audioInputRef.current.subscribe((audioData) => {
-        if (rendererRef.current) {
-          // Pass audio spectrum data to renderer as uniforms with sensitivity
-          rendererRef.current.updateAudioData(audioData, audioSensitivityRef.current);
-        }
-      });
+      if (audioInputRef.current) {
+        audioInputRef.current.subscribe((audioData) => {
+          if (rendererRef.current) {
+            // Pass audio spectrum data to renderer as uniforms with sensitivity
+            rendererRef.current.updateAudioData(audioData, audioSensitivityRef.current);
+          }
+        });
+      }
 
       // Set running state before generation
       setIsRunning(true);
@@ -226,7 +243,6 @@ function App() {
         {!isMinimized ? (
           <>
             <div className="controls-header">
-              <h1>Web LLM VJ</h1>
               <button className="minimize-button" onClick={() => setIsMinimized(true)} title="Minimize">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M14 8H2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
