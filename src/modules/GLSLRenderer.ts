@@ -157,7 +157,7 @@ precision mediump float;
   /**
    * Update audio data uniforms
    */
-  updateAudioData(audioData: AudioAnalysis): void {
+  updateAudioData(audioData: AudioAnalysis, sensitivity: number = 1.0): void {
     if (!this.sandbox) return;
 
     // Calculate frequency band energies
@@ -165,14 +165,17 @@ precision mediump float;
     const midEnergy = this.getFrequencyBandEnergy(audioData.frequencyData, 0.1, 0.5);
     const highEnergy = this.getFrequencyBandEnergy(audioData.frequencyData, 0.5, 1.0);
 
+    // Apply sensitivity multiplier and clamp to 0-1
+    const clamp = (value: number) => Math.min(1.0, Math.max(0.0, value * sensitivity));
+
     // Set uniforms for GLSL shader
-    this.setUniform('u_volume', audioData.volume);
-    this.setUniform('u_bass', bassEnergy);
-    this.setUniform('u_mid', midEnergy);
-    this.setUniform('u_high', highEnergy);
+    this.setUniform('u_volume', clamp(audioData.volume));
+    this.setUniform('u_bass', clamp(bassEnergy));
+    this.setUniform('u_mid', clamp(midEnergy));
+    this.setUniform('u_high', clamp(highEnergy));
 
     // Pass full spectrum as array (first 32 frequency bins for performance)
-    const spectrumData = Array.from(audioData.frequencyData.slice(0, 32)).map(v => v / 255);
+    const spectrumData = Array.from(audioData.frequencyData.slice(0, 32)).map(v => clamp(v / 255));
     this.setUniform('u_spectrum', spectrumData);
   }
 
