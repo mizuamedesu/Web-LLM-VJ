@@ -104,6 +104,9 @@ precision mediump float;
 
       console.log('[GLSLRenderer] Loading shader into glslCanvas...');
 
+      // Store the previous shader code in case we need to rollback
+      const previousShader = this.currentShader;
+
       // Capture console errors to detect compilation issues
       const originalError = console.error;
       let hadError = false;
@@ -127,6 +130,13 @@ precision mediump float;
 
           if (hadError) {
             console.error('[GLSLRenderer] Shader compilation failed:', errorMessage);
+            console.log('[GLSLRenderer] Rolling back to previous shader');
+
+            // Rollback to previous shader if we had one
+            if (previousShader) {
+              this.sandbox!.load(previousShader);
+            }
+
             resolve(false);
           } else {
             this.currentShader = shaderCode;
