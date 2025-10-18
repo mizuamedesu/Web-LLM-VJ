@@ -328,7 +328,7 @@ function App() {
                         checked={modelProvider === 'openai'}
                         onChange={(e) => setModelProvider(e.target.value as ModelProvider)}
                       />
-                      GPT5
+                      GPT
                     </label>
                   </div>
                 </div>
