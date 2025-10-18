@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioInput } from './modules/AudioInput';
-import { GeminiGLSLGenerator } from './modules/GeminiGLSLGenerator';
+import { GLSLGenerator, type ModelProvider } from './modules/GLSLGenerator';
 import { GLSLRenderer } from './modules/GLSLRenderer';
 import { CodeEditor } from './components/CodeEditor';
 import './App.css';
@@ -8,15 +8,18 @@ import './App.css';
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioInputRef = useRef<AudioInput | null>(null);
-  const glslGeneratorRef = useRef<GeminiGLSLGenerator | null>(null);
+  const glslGeneratorRef = useRef<GLSLGenerator | null>(null);
   const rendererRef = useRef<GLSLRenderer | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioSensitivityRef = useRef<number>(1.0);
 
   const [isRunning, setIsRunning] = useState(false);
-  const [apiKey, setApiKey] = useState(() => {
-    // Load API key from localStorage on initial render
+  const [modelProvider, setModelProvider] = useState<ModelProvider>('gemini');
+  const [geminiApiKey, setGeminiApiKey] = useState(() => {
     return localStorage.getItem('gemini-api-key') || '';
+  });
+  const [openaiApiKey, setOpenaiApiKey] = useState(() => {
+    return localStorage.getItem('openai-api-key') || '';
   });
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioInputMode, setAudioInputMode] = useState<'file' | 'microphone'>('file');
@@ -30,12 +33,25 @@ function App() {
   const retryCountRef = useRef<number>(0);
   const maxRetries = 5;
 
-  // Save API key to localStorage whenever it changes
+  // Save API keys to localStorage whenever they change
   useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('gemini-api-key', apiKey);
+    if (geminiApiKey) {
+      localStorage.setItem('gemini-api-key', geminiApiKey);
     }
-  }, [apiKey]);
+  }, [geminiApiKey]);
+
+  useEffect(() => {
+    if (openaiApiKey) {
+      localStorage.setItem('openai-api-key', openaiApiKey);
+    }
+  }, [openaiApiKey]);
+
+  // Switch to microphone mode when OpenAI is selected (file mode not supported)
+  useEffect(() => {
+    if (modelProvider === 'openai' && audioInputMode === 'file') {
+      setAudioInputMode('microphone');
+    }
+  }, [modelProvider]);
 
   useEffect(() => {
     console.log('[App] useEffect triggered');
@@ -75,8 +91,10 @@ function App() {
   const startVisualization = async () => {
     console.log('[App] Starting visualization...');
 
-    if (!apiKey) {
-      setError('Please enter your Gemini API key');
+    const currentApiKey = modelProvider === 'gemini' ? geminiApiKey : openaiApiKey;
+
+    if (!currentApiKey) {
+      setError(`Please enter your ${modelProvider === 'gemini' ? 'Gemini' : 'OpenAI'} API key`);
       return;
     }
 
@@ -87,6 +105,12 @@ function App() {
 
     if (audioInputMode === 'microphone' && !prompt.trim()) {
       setError('Please enter a prompt for the shader');
+      return;
+    }
+
+    // Audio file mode is only supported with Gemini
+    if (audioInputMode === 'file' && modelProvider === 'openai') {
+      setError('Audio file upload is only supported with Gemini. Please use microphone mode or switch to Gemini.');
       return;
     }
 
@@ -126,14 +150,16 @@ function App() {
       }
       console.log('[App] Renderer confirmed initialized');
 
-      // Initialize Gemini GLSL generator
-      console.log('[App] Creating GeminiGLSLGenerator instance');
-      glslGeneratorRef.current = new GeminiGLSLGenerator({
-        apiKey,
+      // Initialize GLSL generator
+      console.log(`[App] Creating GLSLGenerator instance with ${modelProvider}`);
+      glslGeneratorRef.current = new GLSLGenerator({
+        apiKey: currentApiKey,
         audioFile: audioInputMode === 'file' && audioFile ? audioFile : undefined,
         prompt: audioInputMode === 'microphone' ? prompt : undefined,
+        modelProvider: modelProvider,
+        model: modelProvider === 'openai' ? 'gpt-4o' : 'gemini-2.5-flash',
       });
-      console.log('[App] GeminiGLSLGenerator created');
+      console.log('[App] GLSLGenerator created');
 
       // Subscribe to code generation progress
       glslGeneratorRef.current.subscribeProgress((progress) => {
@@ -284,17 +310,56 @@ function App() {
             {!isRunning ? (
               <div className="setup">
                 <div className="input-group">
-                  <label htmlFor="apiKey">Gemini API Key:</label>
-                  <input
-                    id="apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API key"
-                    autoComplete="off"
-                    data-form-type="other"
-                  />
+                  <label>LLM Provider:</label>
+                  <div className="radio-group">
+                    <label>
+                      <input
+                        type="radio"
+                        value="gemini"
+                        checked={modelProvider === 'gemini'}
+                        onChange={(e) => setModelProvider(e.target.value as ModelProvider)}
+                      />
+                      Gemini
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        value="openai"
+                        checked={modelProvider === 'openai'}
+                        onChange={(e) => setModelProvider(e.target.value as ModelProvider)}
+                      />
+                      GPT5
+                    </label>
+                  </div>
                 </div>
+
+                {modelProvider === 'gemini' ? (
+                  <div className="input-group">
+                    <label htmlFor="geminiApiKey">Gemini API Key:</label>
+                    <input
+                      id="geminiApiKey"
+                      type="password"
+                      value={geminiApiKey}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      placeholder="Enter your Gemini API key"
+                      autoComplete="off"
+                      data-form-type="other"
+                    />
+                  </div>
+                ) : (
+                  <div className="input-group">
+                    <label htmlFor="openaiApiKey">OpenAI API Key:</label>
+                    <input
+                      id="openaiApiKey"
+                      type="password"
+                      value={openaiApiKey}
+                      onChange={(e) => setOpenaiApiKey(e.target.value)}
+                      placeholder="Enter your OpenAI API key"
+                      autoComplete="off"
+                      data-form-type="other"
+                    />
+                  </div>
+                )}
 
                 <div className="input-group">
                   <label>Audio Input Mode:</label>
@@ -305,8 +370,9 @@ function App() {
                         value="file"
                         checked={audioInputMode === 'file'}
                         onChange={(e) => setAudioInputMode(e.target.value as 'file' | 'microphone')}
+                        disabled={modelProvider === 'openai'}
                       />
-                      File Upload
+                      File Upload {modelProvider === 'openai' && '(Gemini only)'}
                     </label>
                     <label>
                       <input
